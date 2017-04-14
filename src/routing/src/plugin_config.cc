@@ -49,6 +49,7 @@ RoutingPluginConfig::RoutingPluginConfig(const mysql_harness::ConfigSection *sec
       mode(get_option_mode(section, "mode")),
       max_connections(get_uint_option<uint16_t>(section, "max_connections", 1)),
       max_connect_errors(get_uint_option<uint32_t>(section, "max_connect_errors", 1, UINT32_MAX)),
+      max_connect_errors_timeout(get_uint_option<uint>(section,"max_connect_errors_timeout", 0, UINT32_MAX)),
       client_connect_timeout(get_uint_option<uint32_t>(section, "client_connect_timeout", 2, 31536000)),
       net_buffer_length(get_uint_option<uint32_t>(section, "net_buffer_length", 1024, 1048576)) {
 
@@ -66,6 +67,7 @@ string RoutingPluginConfig::get_default(const string &option) {
       {"connect_timeout", to_string(routing::kDefaultDestinationConnectionTimeout)},
       {"max_connections", to_string(routing::kDefaultMaxConnections)},
       {"max_connect_errors", to_string(routing::kDefaultMaxConnectErrors)},
+      {"max_connect_errors_timeout", to_string(routing::kDefaultMaxConnectErrorsTimeout)},
       {"client_connect_timeout", to_string(routing::kDefaultClientConnectTimeout)},
       {"net_buffer_length", to_string(routing::kDefaultNetBufferLength)},
   };

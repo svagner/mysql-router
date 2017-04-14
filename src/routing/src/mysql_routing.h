@@ -130,9 +130,15 @@ public:
                int max_connections = routing::kDefaultMaxConnections,
                int destination_connect_timeout = routing::kDefaultDestinationConnectionTimeout,
                unsigned long long max_connect_errors = routing::kDefaultMaxConnectErrors,
+               unsigned long long max_connect_errors_timeout = routing::kDefaultMaxConnectErrorsTimeout,
                unsigned int connect_timeout = routing::kDefaultClientConnectTimeout,
                unsigned int net_buffer_length = routing::kDefaultNetBufferLength,
                routing::SocketOperationsBase *socket_operations = routing::SocketOperations::instance());
+               struct AuthErrorCounter {
+                   size_t count;
+                   std::time_t last_attempt;
+               };
+  }
 
   /** @brief Starts the service and accept incoming connections
    *
@@ -228,6 +234,8 @@ public:
   bool block_client_host(const std::array<uint8_t, 16> &client_ip_array,
                          const std::string &client_ip_str, int server = -1);
 
+  bool check_client_errors_time(const std::array<uint8_t, 16> &client_ip_array);
+
   /** @brief Returns list of blocked client hosts
    *
    * Returns list of the blocked client hosts.
@@ -302,6 +310,8 @@ private:
   int destination_connect_timeout_;
   /** @brief Max connect errors blocking hosts when handshake not completed */
   unsigned long long max_connect_errors_;
+  /** @brief Timeout fot reset counter for connect errors blocking hosts when handshake not completed */
+  unsigned long long max_connect_errors_timeout_;
   /** @brief Timeout waiting for handshake response from client */
   unsigned int client_connect_timeout_;
   /** @brief Size of buffer to store receiving packets */
@@ -325,7 +335,7 @@ private:
 
   /** @brief Connection error counters for IPv4 or IPv6 hosts */
   mutable std::mutex mutex_conn_errors_;
-  std::map<std::array<uint8_t, 16>, size_t> conn_error_counters_;
+  std::map<std::array<uint8_t, 16>, AuthErrorCounter> conn_error_counters_;
 
   /** @brief TCP (and UNIX socket) service thread */
   std::thread thread_acceptor_;

@@ -30,6 +30,7 @@
 #include "plugin_config.h"
 #include "protocol/protocol.h"
 
+#include <ctime>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -87,6 +88,7 @@ MySQLRouting::MySQLRouting(routing::AccessMode mode, uint16_t port,
                            int max_connections,
                            int destination_connect_timeout,
                            unsigned long long max_connect_errors,
+                           unsigned long long max_connect_errors_timeout,
                            unsigned int client_connect_timeout,
                            unsigned int net_buffer_length,
                            SocketOperationsBase *socket_operations)
@@ -95,6 +97,7 @@ MySQLRouting::MySQLRouting(routing::AccessMode mode, uint16_t port,
       max_connections_(set_max_connections(max_connections)),
       destination_connect_timeout_(set_destination_connect_timeout(destination_connect_timeout)),
       max_connect_errors_(max_connect_errors),
+      max_connect_errors_timeout_(max_connect_errors_timeout),
       client_connect_timeout_(client_connect_timeout),
       net_buffer_length_(net_buffer_length),
       bind_address_(TCPAddress(bind_address, port)),
@@ -122,18 +125,36 @@ MySQLRouting::MySQLRouting(routing::AccessMode mode, uint16_t port,
   }
 }
 
+bool MySQLRouting::check_client_errors_time(const std::array<uint8_t, 16> &client_ip_array) {
+  size_t timediff;
+  if (max_connect_errors_timeout_ == 0) {
+    return false;
+  }
+  std::time_t curtime = std::time(nullptr);
+  timediff = curtime - conn_error_counters_[client_ip_array].last_attempt;
+  if (timediff > max_connect_errors_timeout_) {
+    conn_error_counters_[client_ip_array].count = 0;
+    return true;
+  };
+  return false;
+}
+
 bool MySQLRouting::block_client_host(const std::array<uint8_t, 16> &client_ip_array,
                                      const string &client_ip_str, int server) {
   bool blocked = false;
   {
     std::lock_guard<std::mutex> lock(mutex_conn_errors_);
+    struct tm *curtime = localtime(&conn_error_counters_[client_ip_array].last_attempt);
+    conn_error_counters_[client_ip_array].last_attempt = std::time(0);
 
-    if (++conn_error_counters_[client_ip_array] >= max_connect_errors_) {
+    if (++conn_error_counters_[client_ip_array].count >= max_connect_errors_) {
       log_warning("[%s] blocking client host %s", name.c_str(), client_ip_str.c_str());
       blocked = true;
     } else {
-      log_info("[%s] %d connection errors for %s (max %u)",
-               name.c_str(), conn_error_counters_[client_ip_array], client_ip_str.c_str(), max_connect_errors_);
+      time_str = asctime(curtime);
+      time_str[strlen(time_str)-1] = '\0';
+      log_info("[%s] %d connection errors for %s (max %u). last attempt: %s",
+               name.c_str(), conn_error_counters_[client_ip_array].count, client_ip_str.c_str(), max_connect_errors_, time_str);
     }
   }
 
@@ -321,6 +342,7 @@ void MySQLRouting::routing_select_thread(int client, const sockaddr_storage& cli
   if (!handshake_done) {
     auto ip_array = in_addr_to_array(client_addr);
     log_debug("[%s] Routing failed for %s: %s", name.c_str(), c_ip.first.c_str(), extra_msg.c_str());
+    check_client_errors_time(ip_array);
     block_client_host(ip_array, c_ip.first.c_str(), server);
   }
 
@@ -457,13 +479,15 @@ void MySQLRouting::start_acceptor() {
                   sock_client, bind_address_.str().c_str());
       }
 
-      if (conn_error_counters_[in_addr_to_array(client_addr)] >= max_connect_errors_) {
-        std::stringstream os;
-        os << "Too many connection errors from " << get_peer_name(sock_client).first;
-        protocol_->send_error(sock_client, 1129, os.str(), "HY000", name);
-        log_info("%s", os.str().c_str());
-        socket_operations_->close(sock_client); // no shutdown() before close()
-        continue;
+      if (conn_error_counters_[in_addr_to_array(client_addr)].count >= max_connect_errors_) {
+        if (!check_client_errors_time(in6_addr_to_array(client_addr.sin6_addr))) {
+          std::stringstream os;
+          os << "Too many connection errors from " << get_peer_name(sock_client).first;
+          protocol_->send_error(sock_client, 1129, os.str(), "HY000", name);
+          log_info("%s", os.str().c_str());
+          socket_operations_->close(sock_client); // no shutdown() before close()
+          continue;
+        }
       }
 
       if (info_active_routes_.load(std::memory_order_relaxed) >= max_connections_) {
