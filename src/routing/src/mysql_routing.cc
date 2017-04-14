@@ -183,15 +183,33 @@ int copy_mysql_protocol_packets(int sender, int receiver, fd_set *readfds,
     }
     size_t bytes_to_write = bytes_read;
     ssize_t written = 0;
+    fd_set rset;
+    struct timeval timeout;
     while (bytes_to_write > 0) {
       if (!check_socket_alive(receiver)) {
         break;
       }
-      if ((written = write(receiver, buffer.data(), bytes_to_write)) < 0) {
-        log_debug("Write error: %s", strerror(errno));
+      written = write(receiver, buffer.data(), bytes_to_write)
+      if (written >= 0) {
+        bytes_to_write -= static_cast<size_t>(written);
+      } else if (errno == EAGAIN) {
+        FD_ZERO (&rset);
+        FD_SET (receiver, &rset);
+        timeout.tv_sec = MAX_IDLE_SECS;
+        timeout.tv_usec = MAX_IDLE_USECS;
+        i = select (sockfd + 1, &rset, NULL, NULL, &timeout);
+        if (i < 0) {
+          log_debug("Write error: %s", strerror(errno));
+          return -1;
+        } else if (i == 0) {
+          log_debug("Timed out without receiving any data: %s", strerror(errno));
+          return -1;
+        }
+        continue;
+      } else {
+        log_debug("Unexpected write error: %s", strerror(errno));
         return -1;
       }
-      bytes_to_write -= static_cast<size_t>(written);
     }
   }
 
