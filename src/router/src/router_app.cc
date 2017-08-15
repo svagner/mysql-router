@@ -135,6 +135,26 @@ static inline void set_signal_handlers() {
 #endif
 }
 
+// Check if the value is valid regular filename and if it is add to the vector,
+// if it is not throw an exception
+static void check_and_add_conf(std::vector<string> &configs,
+                               const std::string& value) throw(std::runtime_error) {
+  mysql_harness::Path cfg_file_path;
+  try {
+    cfg_file_path = mysql_harness::Path(value);
+  } catch (const std::invalid_argument &exc) {
+    throw std::runtime_error(string_format("Failed reading configuration file: %s", exc.what()));
+  }
+
+  if (cfg_file_path.is_regular()) {
+    configs.push_back(cfg_file_path.real_path().str());
+  } else if (cfg_file_path.is_directory()) {
+    throw std::runtime_error(string_format("Expected configuration file, got directory name: %s", value.c_str()));
+  } else {
+    throw std::runtime_error(string_format("Failed reading configuration file: %s", value.c_str()));
+  }
+}
+
 MySQLRouter::MySQLRouter(const mysql_harness::Path& origin, const vector<string>& arguments
 #ifndef _WIN32
                          , SysUserOperationsBase *sys_user_operations
@@ -579,6 +599,17 @@ void MySQLRouter::prepare_command_options() noexcept {
         this->bootstrap_uri_ = server_url;
       });
 
+  arg_handler_.add_option(OptionNames({"--bootstrap-socket"}),
+                          "Bootstrap and configure Router via a Unix socket",
+                          CmdOptionValueReq::required, "socket_name",
+                          [this](const string &socket_name) {
+        if (socket_name.empty()) {
+            throw std::runtime_error("Invalid value for --bootstrap-socket option");
+        }
+
+        this->save_bootstrap_option_not_empty("--bootstrap-socket", "bootstrap_socket", socket_name);
+    });
+
   arg_handler_.add_option(OptionNames({"-d", "--directory"}),
                           "Creates a self-contained directory for a new instance of the Router. (bootstrap)",
                           CmdOptionValueReq::required, "directory",
@@ -658,6 +689,26 @@ void MySQLRouter::prepare_command_options() noexcept {
         }
       });
 
+  arg_handler_.add_option(OptionNames({"--force-password-validation"}),
+                          "When autocreating database account do not use HASHED password. (bootstrap)",
+                          CmdOptionValueReq::none, "",
+                          [this](const string &) {
+        this->bootstrap_options_["force-password-validation"] = "1";
+        if (this->bootstrap_uri_.empty()) {
+          throw std::runtime_error("Option --force-password-validation can only be used together with -B/--bootstrap");
+        }
+      });
+
+  arg_handler_.add_option(OptionNames({"--password-retries"}),
+                          "Number of the retries for generating the router's user password. (bootstrap)",
+                          CmdOptionValueReq::optional, "password-retries",
+                          [this](const string &retries) {
+        this->bootstrap_options_["password-retries"] = retries;
+        if (this->bootstrap_uri_.empty()) {
+          throw std::runtime_error("Option --password-retries can only be used together with -B/--bootstrap");
+        }
+      });
+
   arg_handler_.add_option(OptionNames({"--force"}),
                           "Force reconfiguration of a possibly existing instance of the router. (bootstrap)",
                           CmdOptionValueReq::none, "",
@@ -667,7 +718,6 @@ void MySQLRouter::prepare_command_options() noexcept {
           throw std::runtime_error("Option --force can only be used together with -B/--bootstrap");
         }
       });
-
 
   char ssl_mode_vals[128];
   char ssl_mode_desc[256];
@@ -754,7 +804,8 @@ void MySQLRouter::prepare_command_options() noexcept {
 
   arg_handler_.add_option(OptionNames({"-c", "--config"}),
                           "Only read configuration from given file.",
-                          CmdOptionValueReq::required, "path", [this](const string &value) throw(std::runtime_error) {
+                          CmdOptionValueReq::required, "path", [this](const string &value)
+                          throw(std::runtime_error) {
 
         if (!config_files_.empty()) {
           throw std::runtime_error("Option -c/--config can only be used once; use -a/--extra-config instead.");
@@ -762,25 +813,15 @@ void MySQLRouter::prepare_command_options() noexcept {
 
         // When --config is used, no defaults shall be read
         default_config_files_.clear();
-
-        std::string abspath = mysql_harness::Path(value).real_path().str();
-        if (!abspath.empty()) {
-          config_files_.push_back(abspath);
-        } else {
-          throw std::runtime_error(string_format("Failed reading configuration file: %s", value.c_str()));
-        }
+        check_and_add_conf(config_files_, value);
       });
 
   arg_handler_.add_option(CmdOption::OptionNames({"-a", "--extra-config"}),
                           "Read this file after configuration files are read from either "
                               "default locations or from files specified by the --config option.",
-                          CmdOptionValueReq::required, "path", [this](const string &value) throw(std::runtime_error) {
-        std::string abspath = mysql_harness::Path(value).real_path().str();
-        if (!abspath.empty()) {
-          extra_config_files_.push_back(abspath);
-        } else {
-          throw std::runtime_error(string_format("Failed reading configuration file: %s", value.c_str()));
-        }
+                          CmdOptionValueReq::required, "path", [this](const string &value)
+                          throw(std::runtime_error) {
+        check_and_add_conf(extra_config_files_, value);
       });
 // These are additional Windows-specific options, added (at the time of writing) in check_service_operations().
 // Grep after '--install-service' and you shall find.
@@ -865,6 +906,8 @@ void MySQLRouter::bootstrap(const std::string &server_url) {
         std::cerr << "Cannot create directory " << default_keyring_file << ": " << get_strerror(errno) << "\n";
         throw std::runtime_error("Could not create keyring directory");
       } else {
+        // sets the directory owner for the --user if provided
+        config_gen.set_file_owner(bootstrap_options_, default_keyring_file);
         default_keyring_file = keyring_dir.real_path().str();
       }
     }
