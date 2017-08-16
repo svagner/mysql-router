@@ -20,6 +20,7 @@
 
 #include "common.h"
 #include "dest_first_available.h"
+#include "dest_first_ring_available.h"
 #include "dest_metadata_cache.h"
 #include "logger.h"
 #include "mysql_routing.h"
@@ -660,6 +661,8 @@ void MySQLRouting::set_destinations_from_csv(const string &csv) {
     destination_.reset(new RouteDestination(protocol_->get_type(), socket_operations_));
   } else if (AccessMode::kReadWrite == mode_) {
     destination_.reset(new DestFirstAvailable(protocol_->get_type(), socket_operations_));
+  } else if (AccessMode::kReadWriteRing == mode_) {
+    destination_.reset(new DestFirstRingAvailable(protocol_->get_type(), socket_operations_));
   } else {
     throw std::runtime_error("Unknown mode");
   }

@@ -95,6 +95,7 @@ enum class AccessMode {
   kUndefined = 0,
   kReadWrite = 1,
   kReadOnly = 2,
+  kReadWriteRing = 3,
 };
 
 void get_access_mode_names(std::string*);

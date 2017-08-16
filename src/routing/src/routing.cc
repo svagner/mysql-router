@@ -55,7 +55,7 @@ const unsigned long long kDefaultMaxConnectErrorsTimeout = 0;
 const unsigned int kDefaultClientConnectTimeout = 9; // Default connect_timeout MySQL Server minus 1
 
 const char* const kAccessModeNames[] = {
-  nullptr, "read-write", "read-only"
+  nullptr, "read-write", "read-only", "read-write-ring"
 };
 
 constexpr size_t kAccessModeCount =
