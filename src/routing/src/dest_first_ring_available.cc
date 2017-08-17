@@ -37,7 +37,7 @@ int DestFirstRingAvailable::get_server_socket(int connect_timeout, int *error) n
   }
 
   // We start the list at the currently available server
-  for (size_t i = current_pos_, size_t trying = 0; i < destinations_.size(); ++i, ++trying) {
+  for (size_t i = current_pos_, trying = 0; i < destinations_.size(); ++i, ++trying) {
     auto addr = destinations_.at(i);
     log_debug("Trying server %s (index %d)", addr.str().c_str(), i);
     auto sock = get_mysql_socket(addr, connect_timeout);

@@ -138,7 +138,6 @@ public:
                    size_t count;
                    std::time_t last_attempt;
                };
-  }
 
   /** @brief Starts the service and accept incoming connections
    *
@@ -187,7 +186,7 @@ public:
    *
    * @return Timeout in seconds as int
    */
-  int get_destination_connect_timeout() const noexcept {
+  int get_destination_connect_timeout() noexcept {
     return destination_connect_timeout_;
   }
 

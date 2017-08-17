@@ -152,7 +152,7 @@ bool MySQLRouting::block_client_host(const std::array<uint8_t, 16> &client_ip_ar
       log_warning("[%s] blocking client host %s", name.c_str(), client_ip_str.c_str());
       blocked = true;
     } else {
-      time_str = asctime(curtime);
+      auto time_str = asctime(curtime);
       time_str[strlen(time_str)-1] = '\0';
       log_info("[%s] %d connection errors for %s (max %u). last attempt: %s",
                name.c_str(), conn_error_counters_[client_ip_array].count, client_ip_str.c_str(), max_connect_errors_, time_str);
@@ -171,7 +171,7 @@ const std::vector<std::array<uint8_t, 16>> MySQLRouting::get_blocked_client_host
 
   std::vector<std::array<uint8_t, 16>> result;
   for(const auto& client_ip: conn_error_counters_) {
-    if (client_ip.second >= max_connect_errors_) {
+    if (client_ip.second.count >= max_connect_errors_) {
       result.push_back(client_ip.first);
     }
   }
@@ -481,7 +481,7 @@ void MySQLRouting::start_acceptor() {
       }
 
       if (conn_error_counters_[in_addr_to_array(client_addr)].count >= max_connect_errors_) {
-        if (!check_client_errors_time(in6_addr_to_array(client_addr.sin6_addr))) {
+        if (!check_client_errors_time(in_addr_to_array(client_addr))) {
           std::stringstream os;
           os << "Too many connection errors from " << get_peer_name(sock_client).first;
           protocol_->send_error(sock_client, 1129, os.str(), "HY000", name);

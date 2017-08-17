@@ -15,8 +15,8 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef ROUTING_DESTFAILOVER_INCLUDED
-#define ROUTING_DESTFAILOVER_INCLUDED
+#ifndef ROUTING_DESTFAILOVERRING_INCLUDED
+#define ROUTING_DESTFAILOVERRING_INCLUDED
 
 #include "destination.h"
 #include "mysqlrouter/routing.h"
@@ -31,4 +31,4 @@ class DestFirstRingAvailable final : public RouteDestination {
 };
 
 
-#endif // ROUTING_DESTFAILOVER_INCLUDED
+#endif // ROUTING_DESTFAILOVERRING_INCLUDED

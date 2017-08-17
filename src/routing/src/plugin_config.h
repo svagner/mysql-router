@@ -74,6 +74,7 @@ public:
   const int max_connections;
   /** @brief `max_connect_errors` option read from configuration section */
   const unsigned long long max_connect_errors;
+  const unsigned long long max_connect_errors_timeout;
   /** @brief `client_connect_timeout` option read from configuration section */
   const unsigned int client_connect_timeout;
   /** @brief Size of buffer to receive packets */
