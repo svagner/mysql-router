@@ -32,20 +32,26 @@ int DestFirstRingAvailable::get_server_socket(int connect_timeout, int *error) n
   //
   // This is what this function does.
 
+
   if (destinations_.empty()) {
+  log_debug("read-write-ring: destinations are empty");
     return -1;
   }
 
+  size_t d = destinations_.size();
   // We start the list at the currently available server
   for (size_t i = current_pos_, trying = 0; i < destinations_.size(); ++i, ++trying) {
+
     auto addr = destinations_.at(i);
     log_debug("Trying server %s (index %d)", addr.str().c_str(), i);
+    log_debug("read-write-ring: index: %d, trying: %d, destsize: %d", i, trying, d);
     auto sock = get_mysql_socket(addr, connect_timeout);
     if (sock != -1) {
       current_pos_ = i;
       return sock;
-    } else if (trying < destinations_.size() && current_pos_ == destinations_.size() - 1) {
-        current_pos_ = 0;
+    } else if (trying < destinations_.size() && i == destinations_.size() - 1) {
+    	log_debug("read-write-ring: set_curr_pos to zero");
+        i = -1;
     }
   }
 
